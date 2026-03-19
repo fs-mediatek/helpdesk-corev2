@@ -41,7 +41,7 @@ const coreNavItems: NavItem[] = [
   { key: "kb", href: "/kb", label: "Wissensdatenbank", icon: BookOpen },
   { key: "locations", href: "/locations", label: "Standorte", icon: MapPin },
   { key: "templates", href: "/templates", label: "Vorlagen", icon: FileText },
-  { key: "plugins", href: "/plugins", label: "Add-ons", icon: Puzzle },
+  { key: "plugins", href: "/plugins", label: "Module & Add-ons", icon: Puzzle },
   { key: "users", href: "/users", label: "Benutzer", icon: Users },
   { key: "settings", href: "/settings", label: "Einstellungen", icon: Settings },
 ]
