@@ -358,44 +358,29 @@ const plugin: HelpdeskPlugin = {
         return NextResponse.json({ error: 'Nur Admins' }, { status: 403 })
       }
       const appDir = process.cwd()
-      const log: string[] = []
-      try {
-        // 1. Discard local changes, then pull
-        log.push('Git pull...')
-        execSync('git checkout -- . 2>&1', { cwd: appDir, timeout: 10000 })
-        const pullResult = execSync('git pull origin main 2>&1', { cwd: appDir, timeout: 30000 }).toString()
-        log.push(pullResult.trim())
+      const updateScript = path.join(appDir, 'update.sh')
 
-        // 2. npm install
-        log.push('Abhängigkeiten aktualisieren...')
-        const npmResult = execSync('npm install --silent 2>&1', { cwd: appDir, timeout: 120000 }).toString()
-        log.push(npmResult.trim() || 'OK')
-
-        // 3. Restart service (build happens automatically via start.sh)
-        log.push('Neustart wird ausgelöst (Build + Start)...')
-
-        // Read new version before restart
-        const newPkg = JSON.parse(fs.readFileSync(path.join(appDir, 'package.json'), 'utf8'))
-
-        // Trigger restart in background (delayed so response can be sent first)
-        setTimeout(() => {
-          try {
-            execSync('systemctl restart helpdesk 2>&1', { timeout: 5000 })
-          } catch {
-            // Expected — the process itself gets killed by the restart
-          }
-        }, 1500)
-
-        return NextResponse.json({
-          success: true,
-          version: newPkg.version,
-          log,
-          restartRequired: false, // restart is already triggered
-        })
-      } catch (err: any) {
-        log.push(`Fehler: ${err.message}`)
-        return NextResponse.json({ success: false, log, error: err.message }, { status: 500 })
+      if (!fs.existsSync(updateScript)) {
+        return NextResponse.json({ error: 'update.sh nicht gefunden' }, { status: 500 })
       }
+
+      // Launch update script detached — it will stop this service, pull, build, restart
+      const { spawn } = require('child_process')
+      spawn('bash', [updateScript], {
+        detached: true,
+        stdio: 'ignore',
+        cwd: appDir,
+      }).unref()
+
+      return NextResponse.json({
+        success: true,
+        log: [
+          'Update gestartet — der Server wird gleich neu gestartet.',
+          'Fortschritt auf der Konsole: journalctl -u helpdesk -f',
+          'Update-Log: cat /tmp/helpdesk-update.log',
+        ],
+        restartRequired: false,
+      })
     },
 
     // ---- Factory Reset ----
