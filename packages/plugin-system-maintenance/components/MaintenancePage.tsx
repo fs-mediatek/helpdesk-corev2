@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Server, Database, HardDrive, Loader2, Trash2, Download, RefreshCw, CloudDownload, CheckCircle, AlertTriangle, ArrowUpCircle, Upload, FolderSync } from 'lucide-react'
+import { Server, Database, HardDrive, Loader2, Trash2, Download, RefreshCw, CloudDownload, CheckCircle, AlertTriangle, ArrowUpCircle, Upload, FolderSync, RotateCcw } from 'lucide-react'
 
 type SystemInfo = {
   appVersion: string
@@ -32,6 +32,7 @@ const TABS = [
   { id: 'database', label: 'Datenbank', icon: Database },
   { id: 'backups', label: 'Backups', icon: HardDrive },
   { id: 'migration', label: 'Migration', icon: FolderSync },
+  { id: 'reset', label: 'Zurücksetzen', icon: RotateCcw },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -410,6 +411,7 @@ export function MaintenancePage({ slug }: { slug: string[] }) {
       {activeTab === 'database' && <DatabaseTab />}
       {activeTab === 'backups' && <BackupsTab />}
       {activeTab === 'migration' && <MigrationTab />}
+      {activeTab === 'reset' && <ResetTab />}
     </div>
   )
 }
@@ -510,6 +512,95 @@ function MigrationTab() {
         <p><strong>4.</strong> Systemwartung → Migration → SQL-Datei importieren</p>
         <p><strong>5.</strong> Server neu starten</p>
         <p className="text-xs text-muted-foreground/60 mt-2">Uploads und Bilder müssen manuell kopiert werden (Ordner: /opt/helpdesk/uploads, /opt/helpdesk/public/catalog-images)</p>
+      </div>
+    </div>
+  )
+}
+
+// ── Reset Tab ──
+function ResetTab() {
+  const [confirmText, setConfirmText] = useState('')
+  const [resetting, setResetting] = useState(false)
+  const [result, setResult] = useState<any>(null)
+
+  const doReset = async () => {
+    if (confirmText !== 'WERKSZUSTAND') return
+    if (!confirm('LETZTE WARNUNG: Alle Daten, Benutzer, Tickets und Einstellungen werden unwiderruflich gelöscht. Wirklich fortfahren?')) return
+    setResetting(true)
+    setResult(null)
+    try {
+      const res = await fetch('/api/plugins/system-maintenance/factory-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: 'WERKSZUSTAND' }),
+      })
+      const data = await res.json()
+      setResult(data)
+    } catch (e: any) {
+      setResult({ success: false, error: e.message })
+    } finally {
+      setResetting(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-red-500/30 bg-card p-5 shadow-sm">
+        <h3 className="font-semibold flex items-center gap-2 mb-2 text-red-500">
+          <RotateCcw className="h-5 w-5" />
+          Werkszustand herstellen
+        </h3>
+        <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400 mb-4 space-y-1">
+          <p className="font-medium">Diese Aktion kann nicht rückgängig gemacht werden!</p>
+          <p>Es werden alle Daten unwiderruflich gelöscht:</p>
+          <ul className="list-disc list-inside ml-2 space-y-0.5 text-red-400/80">
+            <li>Alle Datenbank-Tabellen (Benutzer, Tickets, Assets, Einstellungen, ...)</li>
+            <li>Alle hochgeladenen Dateien</li>
+            <li>Alle Backups</li>
+          </ul>
+          <p className="mt-2">Nach dem Zurücksetzen wird der Setup-Assistent erneut gestartet.</p>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-sm text-muted-foreground block mb-1.5">
+              Zur Bestätigung <span className="font-mono font-bold text-red-500">WERKSZUSTAND</span> eingeben:
+            </label>
+            <input
+              type="text"
+              value={confirmText}
+              onChange={e => setConfirmText(e.target.value)}
+              placeholder="WERKSZUSTAND"
+              className="w-64 rounded-lg border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-red-500/50"
+              spellCheck={false}
+              autoComplete="off"
+            />
+          </div>
+
+          <button
+            onClick={doReset}
+            disabled={confirmText !== 'WERKSZUSTAND' || resetting}
+            className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+            {resetting ? 'Wird zurückgesetzt...' : 'System zurücksetzen'}
+          </button>
+        </div>
+
+        {result && (
+          <div className={`mt-4 rounded-lg px-4 py-3 text-sm ${result.success ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+            {result.error && <p className="font-medium mb-1">Fehler: {result.error}</p>}
+            {result.log?.map((l: string, i: number) => <p key={i}>{l}</p>)}
+            {result.success && (
+              <button
+                onClick={() => window.location.href = '/setup'}
+                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                Zum Setup-Assistenten
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

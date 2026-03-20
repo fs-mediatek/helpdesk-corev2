@@ -95,6 +95,23 @@ chmod -R 755 $APP_DIR
 
 echo -e "${GREEN}[6/6]${NC} Systemdienst + Admin..."
 NPX_PATH=$(which npx)
+
+# Start script: build + start in production
+cat > ${APP_DIR}/start.sh <<'STARTEOF'
+#!/bin/bash
+cd /opt/helpdesk
+echo "[HelpDesk] Building..."
+npx next build 2>&1 || echo "[HelpDesk] Build failed — starting in dev mode"
+if [ -d .next ]; then
+  echo "[HelpDesk] Starting production server..."
+  exec npx next start -p 3000 -H 0.0.0.0
+else
+  echo "[HelpDesk] Starting dev server..."
+  exec npx next dev -p 3000 -H 0.0.0.0
+fi
+STARTEOF
+chmod +x ${APP_DIR}/start.sh
+
 cat > /etc/systemd/system/helpdesk.service <<EOF
 [Unit]
 Description=HelpDesk Core
@@ -104,7 +121,7 @@ Wants=mariadb.service
 Type=simple
 User=root
 WorkingDirectory=${APP_DIR}
-ExecStart=${NPX_PATH} next ${APP_MODE} -p ${APP_PORT} -H 0.0.0.0
+ExecStart=/bin/bash ${APP_DIR}/start.sh
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production

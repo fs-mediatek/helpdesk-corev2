@@ -370,28 +370,88 @@ const plugin: HelpdeskPlugin = {
         const npmResult = execSync('npm install --silent 2>&1', { cwd: appDir, timeout: 120000 }).toString()
         log.push(npmResult.trim() || 'OK')
 
-        // 3. Rebuild (optional — falls fehlschlägt, läuft Dev-Mode weiter)
-        log.push('Build...')
-        let buildOk = false
-        try {
-          const buildResult = execSync('npx next build 2>&1', { cwd: appDir, timeout: 300000 }).toString()
-          buildOk = true
-          log.push(buildResult.includes('Ready') || buildResult.includes('Compiled') ? 'Build erfolgreich' : 'Build abgeschlossen')
-        } catch (buildErr: any) {
-          log.push('Build fehlgeschlagen — Neustart im Dev-Modus')
-          log.push(buildErr.stdout?.toString().slice(-200) || buildErr.message?.slice(0, 200) || 'Unbekannter Build-Fehler')
-        }
+        // 3. Restart service (build happens automatically via start.sh)
+        log.push('Neustart wird ausgelöst (Build + Start)...')
 
-        // Read new version
+        // Read new version before restart
         const newPkg = JSON.parse(fs.readFileSync(path.join(appDir, 'package.json'), 'utf8'))
+
+        // Trigger restart in background (delayed so response can be sent first)
+        setTimeout(() => {
+          try {
+            execSync('systemctl restart helpdesk 2>&1', { timeout: 5000 })
+          } catch {
+            // Expected — the process itself gets killed by the restart
+          }
+        }, 1500)
 
         return NextResponse.json({
           success: true,
           version: newPkg.version,
           log,
-          restartRequired: true,
-          buildOk,
+          restartRequired: false, // restart is already triggered
         })
+      } catch (err: any) {
+        log.push(`Fehler: ${err.message}`)
+        return NextResponse.json({ success: false, log, error: err.message }, { status: 500 })
+      }
+    },
+
+    // ---- Factory Reset ----
+    'POST /factory-reset': async (req, ctx) => {
+      if (!ctx.session.role.includes('admin')) {
+        return NextResponse.json({ error: 'Nur Admins' }, { status: 403 })
+      }
+
+      const body = await req.json().catch(() => ({}))
+      if (body.confirm !== 'WERKSZUSTAND') {
+        return NextResponse.json({ error: 'Bestätigung fehlt' }, { status: 400 })
+      }
+
+      const log: string[] = []
+
+      try {
+        // 1. Get all tables
+        const tableRows = await ctx.db.query<Record<string, string>>('SHOW TABLES')
+        const tables = tableRows.map(r => Object.values(r)[0])
+
+        // 2. Disable FK checks
+        await ctx.db.query('SET FOREIGN_KEY_CHECKS=0')
+
+        // 3. Drop all tables
+        for (const table of tables) {
+          try {
+            await ctx.db.query(`DROP TABLE IF EXISTS \`${table}\``)
+            log.push(`Tabelle ${table} gelöscht`)
+          } catch (err: any) {
+            log.push(`${table}: ${err.message?.slice(0, 80)}`)
+          }
+        }
+
+        await ctx.db.query('SET FOREIGN_KEY_CHECKS=1')
+
+        // 4. Delete uploads (except .gitkeep)
+        const uploadsDir = path.join(process.cwd(), 'uploads')
+        if (fs.existsSync(uploadsDir)) {
+          const files = fs.readdirSync(uploadsDir).filter(f => f !== '.gitkeep')
+          for (const f of files) {
+            try { fs.unlinkSync(path.join(uploadsDir, f)) } catch {}
+          }
+          log.push(`${files.length} Uploads gelöscht`)
+        }
+
+        // 5. Delete backups (except .gitkeep)
+        if (fs.existsSync(BACKUP_DIR)) {
+          const files = fs.readdirSync(BACKUP_DIR).filter(f => f !== '.gitkeep')
+          for (const f of files) {
+            try { fs.unlinkSync(path.join(BACKUP_DIR, f)) } catch {}
+          }
+          log.push(`${files.length} Backups gelöscht`)
+        }
+
+        log.push('Werkszustand hergestellt — Setup wird beim nächsten Aufruf gestartet')
+
+        return NextResponse.json({ success: true, log })
       } catch (err: any) {
         log.push(`Fehler: ${err.message}`)
         return NextResponse.json({ success: false, log, error: err.message }, { status: 500 })
