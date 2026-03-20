@@ -213,7 +213,8 @@ const plugin: HelpdeskPlugin = {
                 if (v === null) return 'NULL'
                 if (typeof v === 'number') return String(v)
                 if (v instanceof Date) return `'${v.toISOString().slice(0, 19).replace('T', ' ')}'`
-                return `'${String(v).replace(/'/g, "\\'").replace(/\\/g, "\\\\")}'`
+                // Escape backslashes FIRST, then quotes, then newlines
+                return `'${String(v).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r')}'`
               })
               sql += `INSERT INTO \`${table}\` (\`${cols.join('`,`')}\`) VALUES (${vals.join(',')});\n`
             }
@@ -242,24 +243,68 @@ const plugin: HelpdeskPlugin = {
       if (!file) return NextResponse.json({ error: 'Keine Datei' }, { status: 400 })
 
       const text = await file.text()
-      const statements = text
-        .split(';\n')
-        .map(s => s.trim())
-        .filter(s => s && !s.startsWith('--'))
+
+      // Strip comment-only lines, then split on semicolons respecting quoted strings
+      const cleaned = text
+        .split('\n')
+        .filter(line => {
+          const t = line.trim()
+          return t && !t.startsWith('--') && !t.startsWith('#')
+        })
+        .join('\n')
+
+      // Split on semicolons that are NOT inside single quotes
+      const statements: string[] = []
+      let current = ''
+      let inString = false
+      let escaped = false
+      for (let i = 0; i < cleaned.length; i++) {
+        const ch = cleaned[i]
+        if (escaped) {
+          current += ch
+          escaped = false
+          continue
+        }
+        if (ch === '\\') {
+          current += ch
+          escaped = true
+          continue
+        }
+        if (ch === "'" && !escaped) {
+          inString = !inString
+          current += ch
+          continue
+        }
+        if (ch === ';' && !inString) {
+          const trimmed = current.trim()
+          if (trimmed) statements.push(trimmed)
+          current = ''
+          continue
+        }
+        current += ch
+      }
+      // Last statement without trailing semicolon
+      const lastTrimmed = current.trim()
+      if (lastTrimmed) statements.push(lastTrimmed)
 
       let executed = 0
       let errors = 0
+      const errorDetails: string[] = []
       for (const stmt of statements) {
-        if (!stmt || stmt.length < 3) continue
+        if (stmt.length < 3) continue
         try {
           await ctx.db.query(stmt)
           executed++
-        } catch {
+        } catch (err: unknown) {
           errors++
+          if (errorDetails.length < 10) {
+            const msg = err instanceof Error ? err.message.slice(0, 120) : 'Unknown'
+            errorDetails.push(`${stmt.slice(0, 60)}... → ${msg}`)
+          }
         }
       }
 
-      return NextResponse.json({ success: true, executed, errors, total: statements.length })
+      return NextResponse.json({ success: true, executed, errors, total: statements.length, errorDetails })
     },
 
     // ---- Check for Updates ----

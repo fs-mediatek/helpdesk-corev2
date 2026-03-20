@@ -485,7 +485,17 @@ function MigrationTab() {
             {importResult.error ? (
               <p>Fehler: {importResult.error}</p>
             ) : (
-              <p>Import abgeschlossen: {importResult.executed} Statements ausgeführt{importResult.errors > 0 ? `, ${importResult.errors} Fehler` : ''}</p>
+              <>
+                <p>Import abgeschlossen: {importResult.executed} Statements ausgeführt{importResult.errors > 0 ? `, ${importResult.errors} Fehler` : ''}</p>
+                {importResult.errorDetails?.length > 0 && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-yellow-500 hover:underline">Fehlerdetails anzeigen</summary>
+                    <ul className="mt-1 space-y-1 text-xs text-muted-foreground font-mono">
+                      {importResult.errorDetails.map((d: string, i: number) => <li key={i}>{d}</li>)}
+                    </ul>
+                  </details>
+                )}
+              </>
             )}
           </div>
         )}
