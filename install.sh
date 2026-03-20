@@ -59,7 +59,12 @@ mariadb -u root -e "SELECT 1" ${DB_NAME} &>/dev/null && echo "  → Verbindung O
 
 echo -e "${GREEN}[5/6]${NC} Anwendung installieren..."
 INSTALL_DIR=$(pwd)
-[ "$INSTALL_DIR" != "$APP_DIR" ] && mkdir -p $APP_DIR && cp -r . $APP_DIR/
+if [ "$INSTALL_DIR" != "$APP_DIR" ]; then
+  mkdir -p $APP_DIR
+  cp -r . $APP_DIR/
+  # Ensure .git is copied for updates via UI
+  [ -d .git ] && cp -r .git $APP_DIR/.git
+fi
 cd $APP_DIR
 
 SERVER_IP=$(hostname -I | awk '{print $1}')

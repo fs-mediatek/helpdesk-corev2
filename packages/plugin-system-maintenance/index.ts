@@ -190,7 +190,7 @@ const plugin: HelpdeskPlugin = {
       const appDir = process.cwd()
       try {
         // Fetch latest from remote
-        execSync('sudo git fetch origin 2>&1', { cwd: appDir, timeout: 15000 })
+        execSync('git fetch origin 2>&1', { cwd: appDir, timeout: 15000 })
         const local = execSync('git rev-parse HEAD', { cwd: appDir }).toString().trim()
         const remote = execSync('git rev-parse origin/main', { cwd: appDir }).toString().trim()
         const behind = execSync('git rev-list HEAD..origin/main --count', { cwd: appDir }).toString().trim()
@@ -233,7 +233,7 @@ const plugin: HelpdeskPlugin = {
       try {
         // 1. Git pull
         log.push('Git pull...')
-        const pullResult = execSync('sudo git pull origin main 2>&1', { cwd: appDir, timeout: 30000 }).toString()
+        const pullResult = execSync('git pull origin main 2>&1', { cwd: appDir, timeout: 30000 }).toString()
         log.push(pullResult.trim())
 
         // 2. npm install
