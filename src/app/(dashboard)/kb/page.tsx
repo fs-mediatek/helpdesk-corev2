@@ -4,12 +4,15 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, Search, BookOpen, ThumbsUp, Eye, Loader2, X } from "lucide-react"
+import { Plus, Search, BookOpen, ThumbsUp, Eye, Loader2, X, Pencil, Trash2 } from "lucide-react"
 
-function NewArticleModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [title, setTitle] = useState("")
-  const [content, setContent] = useState("")
-  const [status, setStatus] = useState("draft")
+const inputClass = "flex h-9 w-full rounded-lg border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+
+function ArticleModal({ article, onClose, onSaved }: { article?: any; onClose: () => void; onSaved: () => void }) {
+  const isEdit = !!article
+  const [title, setTitle] = useState(article?.title || "")
+  const [content, setContent] = useState(article?.content_html || "")
+  const [status, setStatus] = useState(article?.status || "draft")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -18,8 +21,9 @@ function NewArticleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
     if (!title.trim()) { setError("Titel ist erforderlich"); return }
     setSaving(true); setError(null)
     try {
-      const res = await fetch("/api/kb", {
-        method: "POST",
+      const url = isEdit ? `/api/kb/${article.id}` : "/api/kb"
+      const res = await fetch(url, {
+        method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, content, status }),
       })
@@ -33,13 +37,11 @@ function NewArticleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
     }
   }
 
-  const inputClass = "flex h-9 w-full rounded-lg border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-card rounded-2xl border shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-lg font-semibold">Neuer Artikel</h2>
+          <h2 className="text-lg font-semibold">{isEdit ? "Artikel bearbeiten" : "Neuer Artikel"}</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
         </div>
         <form onSubmit={save} className="p-6 space-y-3">
@@ -68,7 +70,7 @@ function NewArticleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-accent transition-colors">Abbrechen</button>
             <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
-              {saving ? <><Loader2 className="h-4 w-4 animate-spin" />Erstelle...</> : "Erstellen"}
+              {saving ? <><Loader2 className="h-4 w-4 animate-spin" />{isEdit ? "Speichere..." : "Erstelle..."}</> : isEdit ? "Speichern" : "Erstellen"}
             </button>
           </div>
         </form>
@@ -82,6 +84,8 @@ export default function KBPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [showNew, setShowNew] = useState(false)
+  const [editArticle, setEditArticle] = useState<any | null>(null)
+  const [deleting, setDeleting] = useState<number | null>(null)
 
   const load = () => {
     const params = new URLSearchParams()
@@ -93,6 +97,36 @@ export default function KBPage() {
   }
 
   useEffect(() => { load() }, [search])
+
+  const handleEdit = async (article: any) => {
+    // Fetch full article (including content_html) before opening editor
+    try {
+      const res = await fetch(`/api/kb/${article.id}`)
+      if (!res.ok) throw new Error("Fehler beim Laden")
+      const full = await res.json()
+      setEditArticle(full)
+    } catch {
+      setEditArticle(article)
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Artikel wirklich löschen?")) return
+    setDeleting(id)
+    try {
+      const res = await fetch(`/api/kb/${id}`, { method: "DELETE" })
+      if (!res.ok) {
+        const data = await res.json()
+        alert(data.error || "Fehler beim Löschen")
+      } else {
+        load()
+      }
+    } catch {
+      alert("Fehler beim Löschen")
+    } finally {
+      setDeleting(null)
+    }
+  }
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -117,7 +151,7 @@ export default function KBPage() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {articles.map((article: any) => (
-            <Card key={article.id} className="hover:shadow-md transition-shadow cursor-pointer">
+            <Card key={article.id} className="hover:shadow-md transition-shadow group">
               <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <h3 className="font-medium text-sm leading-snug">{article.title}</h3>
@@ -125,16 +159,36 @@ export default function KBPage() {
                     {article.status === "published" ? "Veröff." : "Entwurf"}
                   </Badge>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground mt-3">
-                  <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{article.views || 0}</span>
-                  <span className="flex items-center gap-1"><ThumbsUp className="h-3 w-3" />{article.helpful_votes || 0}</span>
+                <div className="flex items-center justify-between mt-3">
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{article.views || 0}</span>
+                    <span className="flex items-center gap-1"><ThumbsUp className="h-3 w-3" />{article.helpful_votes || 0}</span>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => handleEdit(article)}
+                      className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                      title="Bearbeiten"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(article.id)}
+                      disabled={deleting === article.id}
+                      className="rounded-md p-1.5 text-muted-foreground hover:text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                      title="Löschen"
+                    >
+                      {deleting === article.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
-      {showNew && <NewArticleModal onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); load() }} />}
+      {showNew && <ArticleModal onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); load() }} />}
+      {editArticle && <ArticleModal article={editArticle} onClose={() => setEditArticle(null)} onSaved={() => { setEditArticle(null); load() }} />}
     </div>
   )
 }

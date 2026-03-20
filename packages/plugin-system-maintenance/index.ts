@@ -48,7 +48,9 @@ const plugin: HelpdeskPlugin = {
 
     // ---- Optimize Tables ----
     'POST /db/optimize': async (_req, ctx) => {
-      const tables = ['tickets', 'users', 'ticket_comments', 'assets', 'inventory_items', 'knowledge_base']
+      // Dynamically fetch all tables instead of using a hardcoded list
+      const tableRows = await ctx.db.query<Record<string, string>>('SHOW TABLES')
+      const tables = tableRows.map((row: Record<string, string>) => Object.values(row)[0])
       const results: { table: string; status: string }[] = []
 
       for (const table of tables) {
@@ -56,7 +58,6 @@ const plugin: HelpdeskPlugin = {
           await ctx.db.query(`OPTIMIZE TABLE \`${table}\``)
           results.push({ table, status: 'OK' })
         } catch (err: unknown) {
-          // Table may not exist — record but don't fail
           results.push({
             table,
             status: err instanceof Error ? err.message.slice(0, 80) : 'Error',
@@ -69,7 +70,9 @@ const plugin: HelpdeskPlugin = {
 
     // ---- Check Tables ----
     'POST /db/check': async (_req, ctx) => {
-      const tables = ['tickets', 'users', 'ticket_comments', 'assets', 'inventory_items', 'knowledge_base']
+      // Dynamically fetch all tables instead of using a hardcoded list
+      const tableRows = await ctx.db.query<Record<string, string>>('SHOW TABLES')
+      const tables = tableRows.map((row: Record<string, string>) => Object.values(row)[0])
       const results: { table: string; status: string }[] = []
 
       for (const table of tables) {
