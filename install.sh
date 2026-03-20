@@ -28,12 +28,19 @@ apt-get update -qq
 DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq
 
 echo -e "${GREEN}[2/6]${NC} Node.js ${NODE_VERSION} installieren..."
+NEED_NODE=false
 if ! command -v node &>/dev/null; then
+  NEED_NODE=true
+elif [ "$(node -v | cut -d. -f1 | tr -d 'v')" -lt "$NODE_VERSION" ]; then
+  echo "  → Alte Version $(node -v) gefunden, wird aktualisiert..."
+  apt-get remove -y -qq nodejs 2>/dev/null
+  NEED_NODE=true
+fi
+if [ "$NEED_NODE" = true ]; then
   curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -
   apt-get install -y -qq nodejs
 fi
-# Ensure node/npm are in PATH for this session
-export PATH=$PATH:/usr/local/bin:/usr/bin:/usr/lib/node_modules/.bin
+export PATH=$PATH:/usr/local/bin:/usr/bin
 hash -r 2>/dev/null
 echo "  → Node $(node -v), npm $(npm -v)"
 
