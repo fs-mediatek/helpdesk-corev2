@@ -289,7 +289,8 @@ const plugin: HelpdeskPlugin = {
 
       let executed = 0
       let errors = 0
-      const errorDetails: string[] = []
+      // Group errors by message to see patterns
+      const errorMap: Record<string, { count: number; example: string }> = {}
       for (const stmt of statements) {
         if (stmt.length < 3) continue
         try {
@@ -297,12 +298,18 @@ const plugin: HelpdeskPlugin = {
           executed++
         } catch (err: unknown) {
           errors++
-          if (errorDetails.length < 10) {
-            const msg = err instanceof Error ? err.message.slice(0, 120) : 'Unknown'
-            errorDetails.push(`${stmt.slice(0, 60)}... → ${msg}`)
+          const msg = err instanceof Error ? err.message.slice(0, 120) : 'Unknown'
+          if (!errorMap[msg]) {
+            errorMap[msg] = { count: 0, example: stmt.slice(0, 80) }
           }
+          errorMap[msg].count++
         }
       }
+
+      // Format grouped errors
+      const errorDetails = Object.entries(errorMap)
+        .sort((a, b) => b[1].count - a[1].count)
+        .map(([msg, { count, example }]) => `${count}x: ${msg}\n   → ${example}...`)
 
       return NextResponse.json({ success: true, executed, errors, total: statements.length, errorDetails })
     },
