@@ -363,10 +363,17 @@ const plugin: HelpdeskPlugin = {
         const npmResult = execSync('npm install --silent 2>&1', { cwd: appDir, timeout: 120000 }).toString()
         log.push(npmResult.trim() || 'OK')
 
-        // 3. Rebuild
+        // 3. Rebuild (optional — falls fehlschlägt, läuft Dev-Mode weiter)
         log.push('Build...')
-        const buildResult = execSync('npx next build 2>&1', { cwd: appDir, timeout: 180000 }).toString()
-        log.push(buildResult.includes('Ready') || buildResult.includes('Compiled') ? 'Build erfolgreich' : 'Build abgeschlossen')
+        let buildOk = false
+        try {
+          const buildResult = execSync('npx next build 2>&1', { cwd: appDir, timeout: 300000 }).toString()
+          buildOk = true
+          log.push(buildResult.includes('Ready') || buildResult.includes('Compiled') ? 'Build erfolgreich' : 'Build abgeschlossen')
+        } catch (buildErr: any) {
+          log.push('Build fehlgeschlagen — Neustart im Dev-Modus')
+          log.push(buildErr.stdout?.toString().slice(-200) || buildErr.message?.slice(0, 200) || 'Unbekannter Build-Fehler')
+        }
 
         // Read new version
         const newPkg = JSON.parse(fs.readFileSync(path.join(appDir, 'package.json'), 'utf8'))
@@ -376,6 +383,7 @@ const plugin: HelpdeskPlugin = {
           version: newPkg.version,
           log,
           restartRequired: true,
+          buildOk,
         })
       } catch (err: any) {
         log.push(`Fehler: ${err.message}`)
