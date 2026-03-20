@@ -32,6 +32,9 @@ if ! command -v node &>/dev/null; then
   curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -
   apt-get install -y -qq nodejs
 fi
+# Ensure node/npm are in PATH for this session
+export PATH=$PATH:/usr/local/bin:/usr/bin:/usr/lib/node_modules/.bin
+hash -r 2>/dev/null
 echo "  → Node $(node -v), npm $(npm -v)"
 
 echo -e "${GREEN}[3/6]${NC} MariaDB installieren..."
